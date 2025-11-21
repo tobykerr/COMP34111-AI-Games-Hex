@@ -24,13 +24,29 @@ class Node:
         exploration = c * ( (2*math.log(self.parent.visits) / self.visits) ** 0.5 )
         return exploitation + exploration
 
-    def best_child(self): # TOBY
+    def best_child(self, mode='max'): # TOBY
         """Possibilities:
 	- Max child (default): choose the child with the highest average reward (argmax_a Q(s,a))
 	- Robust child: choose the child visited most often (highest N)
 	- Max-robust child: choose the child which is maximal in both rewards and visits. If none exists, run longer until one exists.
-    - Secure child: choose child which maximizes a lower confidence interval"""
-        return max(self.children, key=lambda n: n.visits)
+- Secure child: choose child which maximizes a lower confidence interval"""
+        if mode == 'max':
+            # Find child with highest average reward (wins / visits)
+            return max(self.children, key=lambda n: n.wins / n.visits if n.visits > 0 else 0)
+        if mode == 'robust':
+            # Find child with highest visit count
+            return max(self.children, key=lambda n: n.visits)
+        if mode == 'max-robust':
+            # Find children that are maximal in both wins and visits
+            max_wins = max(n.wins for n in self.children)
+            max_visits = max(n.visits for n in self.children)
+            candidates = [n for n in self.children if n.wins == max_wins and n.visits == max_visits]
+            if candidates:
+                return candidates[0]  # Return the first maximal child
+            else:
+                raise ValueError("No maximal child found; consider running MCTS longer.")
+        if mode == 'secure':
+            pass  # TOBY: implement later
 
 class MCTSAgent(AgentBase):
     """Minimal working MCTS agent skeleton.
