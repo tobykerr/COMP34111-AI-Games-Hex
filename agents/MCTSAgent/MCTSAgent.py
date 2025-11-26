@@ -133,8 +133,37 @@ class MCTSAgent(AgentBase):
         pass
 
     def simulate(self, board: Board, colour: Colour) -> Colour: #TOBY
-        pass
+        state = self.clone_board(board)
+
+        while True:  # iterate until a win or draw
+            legal_moves = [
+                (tile.x, tile.y)
+                for row in state.tiles
+                for tile in row
+                if tile.colour is None
+            ]
+            if not legal_moves:
+                return None  # Draw
+
+            move = random.choice(legal_moves)
+            state = self.apply_move(state, move, colour)
+
+            if state.has_ended(colour): 
+                return state.get_winner() # return winning colour
+
+            colour = Colour.opposite(colour) # switch turns
 
     def backpropagate(self, node: Node, winner: Colour): #TOBY
-        pass
+        '''
+        Backpropagate the result of a simulation up the tree.
+        Increment visits (and wins if agent won) for each node up to the root.
+        Args:
+            node (Node): The node to start backpropagation from.
+            winner (Colour): The colour of the winning player.
+        '''
+        reward = 1 if winner == self.colour else 0 # only increment wins if agent's colour won
 
+        while node is not None: # until we reach root of tree
+            node.visits += 1
+            node.wins += reward
+            node = node.parent
