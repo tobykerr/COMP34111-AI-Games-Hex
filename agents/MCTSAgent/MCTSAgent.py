@@ -100,10 +100,18 @@ class MCTSAgent(AgentBase):
         return best.move
     
     def uct_select(self, node: Node) -> Node: # MIYED
-        pass
+        return max(node.children, key=lambda child: child.uct_score())
 
     def clone_board(self, board: Board) -> Board: # must be very efficient # MIYED
-        pass
+        board_copy = Board(board._size)
+        
+        for i in range(board._size):
+            row_original = board.tiles[i]
+            row_copy = board_copy[i]
+            for j in range(board._size):
+                row_copy[j].colour = row_original[j].colour
+                
+        return board_copy
 
     def apply_move(self, board: Board, move: tuple[int, int], colour: Colour) -> Board: #MIYED
         pass
