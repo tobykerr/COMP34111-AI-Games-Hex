@@ -62,9 +62,9 @@ class MCTSAgent(AgentBase):
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         # --- handle pie rule --- # MIYED IS FIGURING THIS OUT
-        if turn == 2:
-            # swap move for testing / placeholder
-            return Move(-1, -1)
+        # if turn == 2:
+        #     # swap move for testing / placeholder
+        #     return Move(-1, -1)
 
         # --- get legal moves from the board ---
         legal_moves = [
@@ -86,16 +86,19 @@ class MCTSAgent(AgentBase):
     def run_mcts(self, board: Board, legal_moves: list[tuple[int, int]]) -> tuple[int, int]:
         root = Node()
         root.untried_moves = legal_moves.copy()
+        random.shuffle(root.untried_moves)  # shuffle to avoid first-row bias
 
         start_time = time.time()
         while time.time() - start_time < self.time_limit:
             node = root
             state = self.clone_board(board)
+            current_colour = self.colour  # start from agent's turn
 
             # 1. Selection
             while node.untried_moves == [] and node.children != []:
                 node = self.uct_select(node)
-                state = self.apply_move(state, node.move, self.colour)
+                state = self.apply_move(state, node.move, current_colour)
+                current_colour = Colour.opposite(current_colour)  # switch turn
 
             # 2. Expansion
             if node.untried_moves:
@@ -104,10 +107,11 @@ class MCTSAgent(AgentBase):
                 child = Node(move=move, parent=node)
                 node.children.append(child)
                 node = child
-                state = self.apply_move(state, move, self.colour)
+                state = self.apply_move(state, move, current_colour)
+                current_colour = Colour.opposite(current_colour)  # switch turn
 
             # 3. Simulation
-            winner = self.simulate(state, self.colour)
+            winner = self.simulate(state, current_colour)
 
             # 4. Backpropagation
             self.backpropagate(node, winner)
