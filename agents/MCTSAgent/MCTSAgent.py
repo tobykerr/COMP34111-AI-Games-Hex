@@ -57,7 +57,8 @@ class MCTSAgent(AgentBase):
 
     def __init__(self, colour: Colour):
         super().__init__(colour)
-        self.board_size = 11  # fixed for this assignment
+        #self.board_size = 11  # fixed for this assignment
+        self.time_limit = 1.8  # seconds per move
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         # --- handle pie rule --- # MIYED IS FIGURING THIS OUT
@@ -119,18 +120,21 @@ class MCTSAgent(AgentBase):
         return max(node.children, key=lambda child: child.uct_score())
 
     def clone_board(self, board: Board) -> Board: # must be very efficient # MIYED
-        board_copy = Board(board._size)
+        board_copy = Board(board.size)
         
-        for i in range(board._size):
+        for i in range(board.size):
             row_original = board.tiles[i]
-            row_copy = board_copy[i]
-            for j in range(board._size):
+            row_copy = board_copy.tiles[i]
+            for j in range(board.size):
                 row_copy[j].colour = row_original[j].colour
                 
         return board_copy
 
-    def apply_move(self, board: Board, move: tuple[int, int], colour: Colour) -> Board: #MIYED
-        pass
+    def apply_move(self, board: Board, move: tuple[int, int], colour: Colour) -> Board: #MIYED # This is toby's quick implementation currently, using for testing other functions
+        new_board = self.clone_board(board)  # Create a copy of the board
+        x, y = move
+        new_board.tiles[x][y].colour = colour  # Apply the move
+        return new_board  # Return the updated board
 
     def simulate(self, board: Board, colour: Colour) -> Colour: #TOBY
         state = self.clone_board(board)
