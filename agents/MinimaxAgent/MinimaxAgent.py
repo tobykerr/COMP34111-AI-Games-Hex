@@ -101,4 +101,11 @@ class AlphaBetaAgent(AgentBase):
 
     def _evaluate(self, board):
         # to do 
+
+
+        # ---------idea------------
+        # maybe use dijsktra to find shortest path
+        # shortest path for the current color. shortest path is more valuable
+        # evaluate both the colors's paths
+        # find the difference and try minimize / maximize
         pass
