@@ -57,14 +57,18 @@ class MCTSAgent(AgentBase):
 
     def __init__(self, colour: Colour):
         super().__init__(colour)
-        #self.board_size = 11  # fixed for this assignment
+        self.board_size = 11  # fixed for this assignment
         self.time_limit = 1.8  # seconds per move
+        self.swap_decided = False
+        self.swap_choice = False
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         # --- handle pie rule --- # MIYED IS FIGURING THIS OUT
-        # if turn == 2:
-        #     # swap move for testing / placeholder
-        #     return Move(-1, -1)
+        if turn == 2 and opp_move is not None and not self.swap_decided:
+            self.swap_decided = True
+            self.swap_choice = self.decide_swap(board, opp_move)
+            if self.swap_choice:
+                return Move(-1, -1)
 
         # --- get legal moves from the board ---
         legal_moves = [
@@ -82,6 +86,54 @@ class MCTSAgent(AgentBase):
             # should never happen
             print("No legal moves available!")
             return Move(0, 0)
+            
+    def decide_swap(board: Board, first_move: Move):
+        samples = 30 #changed depending on how much data may be needed
+        
+        center = self.board_size // 2
+        
+        bias = (abs(center - first_move.x) + abs(center - first_move.y)) / (2 * center)
+        
+        if (first_move.x, first_move.y) in [(0,0), (0,size-1), (size-1,0), (size-1,size-1)]:
+            return False
+        
+        opponent = Colour.BLUE if self.colour == Colour.RED else Colour.RED
+        wins = 0
+        
+        for i in range(samples):
+            sim_board = self.clone_board(board)
+            sim_board.set_tile_colour(first_move.x, first_move.y, opponent)
+
+            winner = self.play_random_game(sim_board, opponent)
+            if winner == opponent:
+                wins += 1
+
+        win_rate = wins / samples
+        
+        return (win_rate > 0.55 and bias < 0.65)
+        
+    def play_random_game(self, board: Board, current_player: Colour) -> Colour:
+        size = board.size
+        if current_player == Colour.RED:
+            opponent = Colour.BLUE
+        else:
+            opponent = Colour.RED
+
+        while True:
+            empty_tiles = [(t.x, t.y) for row in board.tiles for t in row if t.colour is None]
+            if not empty_tiles:
+                return board.get_winner() or opponent
+            
+            x, y = random.choice(empty_tiles)
+            board.set_tile_colour(x, y, current_player)
+
+            if board.has_ended(Colour.RED):
+                return Colour.RED
+            if board.has_ended(Colour.BLUE):
+                return Colour.BLUE
+
+            current_player = opponent
+
     
     def run_mcts(self, board: Board, legal_moves: list[tuple[int, int]]) -> tuple[int, int]:
         root = Node()
@@ -125,10 +177,12 @@ class MCTSAgent(AgentBase):
 
     def clone_board(self, board: Board) -> Board: # must be very efficient # MIYED
         board_copy = Board(board.size)
+        tiles_original = board.tiles
+        tiles_copy = board_copy.tiles
         
         for i in range(board.size):
-            row_original = board.tiles[i]
-            row_copy = board_copy.tiles[i]
+            row_original = tiles_original[i]
+            row_copy = tiles_copy[i]
             for j in range(board.size):
                 row_copy[j].colour = row_original[j].colour
                 
