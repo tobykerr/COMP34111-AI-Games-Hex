@@ -16,12 +16,33 @@ class Node:
         self.visits = 0               # Number of times visited
         self.wins = 0                 # Number of wins
         self.untried_moves = []       # Moves that have not been expanded
+        self.rave_visits = 0           # RAVE visits (not used yet)
+        self.rave_wins = 0             # RAVE wins (not used yet)
 
     def uct_score(self: int, c: float = 1.4): # here, self should be the child node (i.e. node reached from s after taking action a)
         if self.visits == 0:                  # so self is like (s, a) in the UCT formula, and self.parent is like (s)
             return float('inf')
         exploitation = self.wins / self.visits
         exploration = c * ( (2*math.log(self.parent.visits) / self.visits) ** 0.5 )
+        return exploitation + exploration
+    
+    def rave_score(self):
+        if self.rave_visits == 0:
+            return 0.5
+        return self.rave_wins / self.rave_visits
+    
+    def blended_score(self, c=1.4, k=300):
+        if self.visits == 0:
+            return float('inf')
+        
+        q = self.wins / self.visits
+        q_rave = self.rave_score()
+
+        beta = k / (self.visits + k)
+
+        exploitation = beta * q_rave + (1 - beta) * q
+        exploration = c * math.sqrt(math.log(self.parent.visits) / self.visits)
+
         return exploitation + exploration
 
     def best_child(self, mode='max'): # TOBY
@@ -58,7 +79,7 @@ class MCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         super().__init__(colour)
         self.board_size = 11  # fixed for this assignment
-        self.time_limit = 1.8  # seconds per move
+        self.time_limit = 1  # seconds per move
         self.swap_decided = False
         self.swap_choice = False
 
@@ -87,14 +108,14 @@ class MCTSAgent(AgentBase):
             print("No legal moves available!")
             return Move(0, 0)
             
-    def decide_swap(board: Board, first_move: Move):
+    def decide_swap(self, board: Board, first_move: Move):
         samples = 30 #changed depending on how much data may be needed
         
         center = self.board_size // 2
         
         bias = (abs(center - first_move.x) + abs(center - first_move.y)) / (2 * center)
         
-        if (first_move.x, first_move.y) in [(0,0), (0,size-1), (size-1,0), (size-1,size-1)]:
+        if (first_move.x, first_move.y) in [(0,0), (0,board.size-1), (board.size-1,0), (board.size-1,board.size-1)]:
             return False
         
         opponent = Colour.BLUE if self.colour == Colour.RED else Colour.RED
@@ -105,6 +126,8 @@ class MCTSAgent(AgentBase):
             sim_board.set_tile_colour(first_move.x, first_move.y, opponent)
 
             winner = self.play_random_game(sim_board, opponent)
+            # winner = self.simulate(board, opponent)
+
             if winner == opponent:
                 wins += 1
 
@@ -163,17 +186,17 @@ class MCTSAgent(AgentBase):
                 current_colour = Colour.opposite(current_colour)  # switch turn
 
             # 3. Simulation
-            winner = self.simulate(state, current_colour)
+            winner, played_moves = self.simulate(state, current_colour)
 
             # 4. Backpropagation
-            self.backpropagate(node, winner)
+            self.backpropagate(node, winner, played_moves)
 
         # Choose the move with the most visits
         best = root.best_child()
         return best.move
     
     def uct_select(self, node: Node) -> Node: # MIYED
-        return max(node.children, key=lambda child: child.uct_score())
+        return max(node.children, key=lambda child: child.blended_score())
 
     def clone_board(self, board: Board) -> Board: # must be very efficient # MIYED
         board_copy = Board(board.size)
@@ -193,9 +216,49 @@ class MCTSAgent(AgentBase):
         x, y = move
         new_board.tiles[x][y].colour = colour  # Apply the move
         return new_board  # Return the updated board
+    
+    def get_biased_moves(self, board: Board, colour: Colour):
+        moves = []
+        for row in board.tiles:
+            for t in row:
+                if t.colour is None:
+                    score = 0
+
+                    # Prefer adjacency to own stones
+                    for nx, ny in self.get_neighbors(t.x, t.y):
+                        if board.tiles[nx][ny].colour == colour:
+                            score += 2
+                        elif board.tiles[nx][ny].colour == Colour.opposite(colour):
+                            score += 1
+
+                    moves.append(((t.x, t.y), score))
+
+        moves.sort(key=lambda x: -x[1])
+        return [m for m, _ in moves[:10]]  # top-k
+    
+    def get_neighbors(self, x: int, y: int) -> list[tuple[int, int]]:
+        directions = [
+            (-1, 0),  # up
+            (1, 0),   # down
+            (0, -1),  # left
+            (0, 1),   # right
+            (-1, 1),  # up-right
+            (1, -1),  # down-left
+        ]
+
+        neighbors = []
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < self.board_size and 0 <= ny < self.board_size:
+                neighbors.append((nx, ny))
+
+        return neighbors
+
+
 
     def simulate(self, board: Board, colour: Colour) -> Colour: #TOBY
         state = self.clone_board(board)
+        played_moves = set()
 
         while True:  # iterate until a win or draw
             legal_moves = [
@@ -205,17 +268,22 @@ class MCTSAgent(AgentBase):
                 if tile.colour is None
             ]
             if not legal_moves:
-                return None  # Draw
-
-            move = random.choice(legal_moves)
+                return None, played_moves  # Draw
+            
+            if random.random() < 0.8:
+                candidate_moves = self.get_biased_moves(state, colour)
+                move = random.choice(candidate_moves) if candidate_moves else random.choice(legal_moves)
+            else:
+                move = random.choice(legal_moves)
+            played_moves.add(move)
             state = self.apply_move(state, move, colour)
 
             if state.has_ended(colour): 
-                return state.get_winner() # return winning colour
+                return state.get_winner(), played_moves # return winning colour
 
             colour = Colour.opposite(colour) # switch turns
 
-    def backpropagate(self, node: Node, winner: Colour): #TOBY
+    def backpropagate(self, node: Node, winner: Colour, played_moves: set): #TOBY
         '''
         Backpropagate the result of a simulation up the tree.
         Increment visits (and wins if agent won) for each node up to the root.
@@ -223,9 +291,45 @@ class MCTSAgent(AgentBase):
             node (Node): The node to start backpropagation from.
             winner (Colour): The colour of the winning player.
         '''
-        reward = 1 if winner == self.colour else 0 # only increment wins if agent's colour won
+        # reward = 1 if winner == self.colour else 0 # only increment wins if agent's colour won
 
-        while node is not None: # until we reach root of tree
-            node.visits += 1
-            node.wins += reward
-            node = node.parent
+        # while node is not None: # until we reach root of tree
+        #     node.visits += 1
+        #     node.wins += reward
+
+        #     if node.parent:
+        #         for child in node.parent.children:
+        #             if child.move in played_moves:
+        #                 child.rave_visits += 1
+        #                 if winner == self.colour:
+        #                     child.rave_wins += 1
+
+        #     node = node.parent
+
+        depth = 0
+        cur = node
+
+        while cur is not None:
+            # --- figure out which player this node represents ---
+            if depth % 2 == 0:
+                player = self.colour
+            else:
+                player = Colour.opposite(self.colour)
+
+            # --- normal MCTS stats ---
+            cur.visits += 1
+            if winner == player:
+                cur.wins += 1
+
+            # --- RAVE updates (AMAF) ---
+            if cur.parent is not None:
+                for child in cur.parent.children:
+                    if child.move in played_moves:
+                        child.rave_visits += 1
+                        if winner == player:
+                            child.rave_wins += 1
+
+            # move up tree
+            cur = cur.parent
+            depth += 1
+
