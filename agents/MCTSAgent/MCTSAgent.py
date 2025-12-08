@@ -13,13 +13,14 @@ class Node:
         self.move = move              # Move that led to this node
         self.parent = parent          # Parent node
         self.children = []            # List of child nodes
-        self.visits = 0               # Number of times visited
-        self.wins = 0                 # Number of wins
+        self.visits = 0               # Number of times selected
+        self.wins = 0                 # From those selections, how many wins
         self.untried_moves = []       # Moves that have not been expanded
-        self.rave_visits = 0           # RAVE visits (not used yet)
-        self.rave_wins = 0             # RAVE wins (not used yet)
+        self.rave_visits = 0           # RAVE visits = number of rollouts where this move was played, even if it was played later and not from this node
+        self.rave_wins = 0             # RAVE wins = number of those rollouts where this move led to a win
 
     def uct_score(self: int, c: float = 1.4): # here, self should be the child node (i.e. node reached from s after taking action a)
+        """Calculate the UCT score for this node. NOT CURRENTLY USED."""
         if self.visits == 0:                  # so self is like (s, a) in the UCT formula, and self.parent is like (s)
             return float('inf')
         exploitation = self.wins / self.visits
@@ -27,21 +28,24 @@ class Node:
         return exploitation + exploration
     
     def rave_score(self):
+        """Get the RAVE score for this node. Noisy, but contains much more info in early steps."""
         if self.rave_visits == 0:
             return 0.5
         return self.rave_wins / self.rave_visits
     
     def blended_score(self, c=1.4, k=300):
+        """Calculate the blended UCT + RAVE score for this node. Blends to weight RAVE more early on, and UCT more later."""
         if self.visits == 0:
             return float('inf')
         
-        q = self.wins / self.visits
+        q = self.wins / self.visits # exploitation term in UCT
         q_rave = self.rave_score()
 
         beta = k / (self.visits + k)
 
         exploitation = beta * q_rave + (1 - beta) * q
-        exploration = c * math.sqrt(math.log(self.parent.visits) / self.visits)
+        exploration = c * ( (2*math.log(self.parent.visits) / self.visits) ** 0.5 ) # exploration term in UCT
+                    # c * math.sqrt(math.log(self.parent.visits) / self.visits)
 
         return exploitation + exploration
 
@@ -218,6 +222,13 @@ class MCTSAgent(AgentBase):
         return new_board  # Return the updated board
     
     def get_biased_moves(self, board: Board, colour: Colour):
+        """
+        Scores empty tiles based on adjacency to own and opponent stones.
+        Returns top 10 moves with highest scores.
+        Moves are scored by:
+        - +2 for each adjacent own stone
+        - +1 for each adjacent opponent stone
+        """
         moves = []
         for row in board.tiles:
             for t in row:
@@ -237,6 +248,7 @@ class MCTSAgent(AgentBase):
         return [m for m, _ in moves[:10]]  # top-k
     
     def get_neighbors(self, x: int, y: int) -> list[tuple[int, int]]:
+        """Returns the coordinates of neighboring tiles for a given (x, y) position."""
         directions = [
             (-1, 0),  # up
             (1, 0),   # down
