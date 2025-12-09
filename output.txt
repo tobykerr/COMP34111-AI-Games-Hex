@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "C:\Users\aboud\Downloads\COMP34111-AI-Games-Hex-main\COMP34111-AI-Games-Hex-main\Hex.py", line 71, in <module>
+    p1_path, p1_class = args.player1.split(" ")
+    ^^^^^^^^^^^^^^^^^
+ValueError: too many values to unpack (expected 2)

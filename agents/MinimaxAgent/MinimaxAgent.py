@@ -1,4 +1,6 @@
 import math
+import copy
+from heapq import heappush, heappop
 
 from src.AgentBase import AgentBase
 from src.Board import Board
@@ -12,14 +14,17 @@ class AlphaBetaAgent(AgentBase):
         self.max_depth = 2 # this can be changed
 
     def make_move(self, turn, board, opp_move):
-        # to do 
-        # need to handle swap rule for very first move
-
-
-
-        # choose (x, y)
-        x, y = self._choose_with_alpha_beta(board, turn)
-        return Move(x, y)  
+        # Swap logic for Turn 2
+        # Move.x is Row, Move.y is Col (Based on Game.py)
+        if turn == 2 and opp_move:
+             # Simple check: If opponent played in the center 5x5 box, swap.
+             if opp_move.x >= 3 and opp_move.x <= 7 and opp_move.y >= 3 and opp_move.y <= 7:
+                  return Move(-1, -1)
+        
+        # Standard Alpha-Beta Search
+        move = self._choose_with_alpha_beta(board, turn)
+        # move is (Row, Col)
+        return Move(move[0], move[1])  
     
 
 
@@ -34,7 +39,7 @@ class AlphaBetaAgent(AgentBase):
         legal_moves = self._generate_legal_moves(board)
 
         for move in legal_moves:
-            new_board = board.copy()
+            new_board = copy.deepcopy(board)
             self._apply_move(new_board, move, self.colour)
 
             val = self._min_value(new_board, depth=self.max_depth-1,
@@ -55,7 +60,7 @@ class AlphaBetaAgent(AgentBase):
 
         value = -math.inf
         for move in self._generate_legal_moves(board):
-            new_board = board.copy()
+            new_board = copy.deepcopy(board)
             self._apply_move(new_board, move, self.colour)
             value = max(value, self._min_value(new_board, depth-1, alpha, beta, turn+1))
             if value >= beta:
@@ -70,7 +75,7 @@ class AlphaBetaAgent(AgentBase):
         opp_colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
         value = math.inf
         for move in self._generate_legal_moves(board):
-            new_board = board.copy()
+            new_board = copy.deepcopy(board)
             self._apply_move(new_board, move, opp_colour)
             value = min(value, self._max_value(new_board, depth-1, alpha, beta, turn+1))
             if value <= alpha:
@@ -80,10 +85,9 @@ class AlphaBetaAgent(AgentBase):
 
     def _terminal_or_cutoff(self, board, depth, turn):
         if depth <= 0:
-            return True 
-        
-        # to do 
-        # game over check (like board.winner or something like that)
+            return True
+        if board.has_ended(Colour.RED) or board.has_ended(Colour.BLUE):
+            return True
         return False
     
     def _generate_legal_moves(self, board):
@@ -91,21 +95,89 @@ class AlphaBetaAgent(AgentBase):
         for y, row in enumerate(board.tiles):
             for x, tile in enumerate(row):
                 if tile.colour is None:
-                    moves.append((x,y))
+                    # Return (Row, Col) => (y, x)
+                    moves.append((y, x))
         return moves
 
     def _apply_move(self, board, move, colour):
-        x, y = move
-        # to do
-        pass
+        r, c = move # (Row, Col)
+        board.set_tile_colour(r, c, colour)
 
     def _evaluate(self, board):
-        # to do 
+        # Calculate shortest path for self
+        my_path_len = self.dijkstra_shortest_path(board, self.colour)
+        # Calculate shortest path for opponent
+        opp_path_len = self.dijkstra_shortest_path(board, self.opp_colour())
+        
+        # Simple heuristic: Opponent path length - My path length
+        return opp_path_len - my_path_len
 
-
-        # ---------idea------------
-        # maybe use dijsktra to find shortest path
-        # shortest path for the current color. shortest path is more valuable
-        # evaluate both the colors's paths
-        # find the difference and try minimize / maximize
-        pass
+    def dijkstra_shortest_path(self, board, colour):
+        size = board.size
+        dists = [[math.inf for _ in range(size)] for _ in range(size)]
+        pq = []
+        
+        # 1. Init start nodes
+        if colour == Colour.RED: # Top to Bottom
+            # Start nodes: Row 0
+            for c in range(size):
+                tile = board.tiles[0][c] # tiles[row][col]
+                if tile.colour == colour:
+                    dists[0][c] = 0
+                    heappush(pq, (0, 0, c)) # cost, row, col
+                elif tile.colour is None:
+                    dists[0][c] = 1
+                    heappush(pq, (1, 0, c))
+        else: # Blue: Left to Right
+            # Start nodes: Col 0
+            for r in range(size):
+                tile = board.tiles[r][0]
+                if tile.colour == colour:
+                    dists[r][0] = 0
+                    heappush(pq, (0, r, 0)) # cost, row, col
+                elif tile.colour is None:
+                    dists[r][0] = 1
+                    heappush(pq, (1, r, 0))
+        
+        processed = set()
+        
+        while pq:
+            cost, r, c = heappop(pq)
+            
+            if (r, c) in processed:
+                continue
+            processed.add((r, c))
+            
+            # Check target
+            if colour == Colour.RED:
+                if r == size - 1:
+                    return cost
+            else:
+                if c == size - 1:
+                    return cost
+            
+            # Neighbors (Hex Grid: Row, Col)
+            # Based on Tile.py Displacements:
+            # (-1, 0), (-1, 1), (0, 1), (1, 0), (1, -1), (0, -1)
+            neighbors = [
+                (r-1, c), (r-1, c+1),
+                (r, c+1), (r+1, c),
+                (r+1, c-1), (r, c-1)
+            ]
+            
+            for nr, nc in neighbors:
+                if 0 <= nr < size and 0 <= nc < size:
+                     tile = board.tiles[nr][nc]
+                     weight = math.inf
+                     if tile.colour == colour:
+                         weight = 0
+                     elif tile.colour is None:
+                         weight = 1
+                     
+                     if weight != math.inf:
+                         new_cost = cost + weight
+                         if new_cost < dists[nr][nc]:
+                             dists[nr][nc] = new_cost
+                             heappush(pq, (new_cost, nr, nc))
+                             
+        return math.inf
