@@ -73,7 +73,7 @@ class Node:
         if mode == 'secure':
             pass  # TOBY: implement later
 
-class MCTSAgent(AgentBase):
+class NoSwapAgent(AgentBase):
     """Minimal working MCTS agent skeleton.
     Currently selects random legal moves.
     Swap logic is handled on turn 2.
@@ -86,15 +86,13 @@ class MCTSAgent(AgentBase):
         self.time_limit = 1  # seconds per move
         self.swap_decided = False
         self.swap_choice = False
+        self.initial_move = Move(0,0)
 
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
-        # --- handle pie rule --- # MIYED IS FIGURING THIS OUT
-        if turn == 2 and opp_move is not None and not self.swap_decided:
-            self.swap_decided = True
-            self.swap_choice = self.decide_swap(board, opp_move)
-            if self.swap_choice:
-                return Move(-1, -1)
-
+      
+        if turn == 1:
+            return self.initial_move
+        
         # --- get legal moves from the board ---
         legal_moves = [
             (tile.x, tile.y)
@@ -113,6 +111,8 @@ class MCTSAgent(AgentBase):
             return Move(0, 0)
             
     def decide_swap(self, board: Board, first_move: Move):
+        samples = 30 #changed depending on how much data may be needed
+        
         center = self.board_size // 2
         
         bias = (abs(center - first_move.x) + abs(center - first_move.y)) / (2 * center)
@@ -123,8 +123,6 @@ class MCTSAgent(AgentBase):
         opponent = Colour.BLUE if self.colour == Colour.RED else Colour.RED
         wins = 0
         
-        #comment this once data has been obtained
-        samples = 30
         for i in range(samples):
             sim_board = self.clone_board(board)
             sim_board.set_tile_colour(first_move.x, first_move.y, opponent)
@@ -134,21 +132,8 @@ class MCTSAgent(AgentBase):
 
             if winner == opponent:
                 wins += 1
-        
+
         win_rate = wins / samples
-        
-        #uncomment this once data has been obtained, add filepath
-        '''
-        winrates = []
-        f = open()
-        for line in f:
-            line = line.strip().split(",") #creates a node from an array from a line by seperating the numbers by ','
-            line = [float(i) for i in line] #converts each array element from string into int 
-            winrates.append(line) #adds new node to the graph
-        f.close()
-        '''
-        
-        win_rate = winrates[first_move.x][first_move.y]
         
         return (win_rate > 0.55 and bias < 0.65)
         
