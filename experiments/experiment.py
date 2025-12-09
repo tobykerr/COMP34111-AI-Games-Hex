@@ -21,6 +21,8 @@ def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, boar
     p2_wins = 0
     runtimes = []
     turns = []
+    p1_timeouts = 0
+    p2_timeouts = 0
     for i in range(num_games):
         g = Game(
             player1=Player(
@@ -39,13 +41,17 @@ def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, boar
         total_turns = results['total_turns']
         winner_name = results['winner']
         total_time = results['total_game_time']
-        # win_method = results['win_method']
+        win_method = results['win_method']
 
         match winner_name:
             case args.player1Name:
                 p1_wins += 1
+                if win_method == 'timeout':
+                    p2_timeouts += 1
             case args.player2Name:
                 p2_wins += 1
+                if win_method == 'timeout':
+                    p1_timeouts += 1
         
         turns.append(total_turns)
         runtimes.append(total_time)
@@ -54,7 +60,9 @@ def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, boar
         'p1_wins': p1_wins,
         'p2_wins': p2_wins,
         'total_turns_list': turns,
-        'total_runtimes_list': runtimes}
+        'total_runtimes_list': runtimes,
+        'p1_timeouts': p1_timeouts,
+        'p2_timeouts': p2_timeouts}
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -139,6 +147,8 @@ if __name__ == "__main__":
     p2_wins = exp1_results['p2_wins'] + exp2_results['p1_wins']
     runtimes = exp1_results['total_runtimes_list'] + exp2_results['total_runtimes_list']
     turns = exp1_results['total_turns_list'] + exp2_results['total_turns_list']
+    p1_timeouts = exp1_results['p1_timeouts'] + exp2_results['p2_timeouts']
+    p2_timeouts = exp1_results['p2_timeouts'] + exp2_results['p1_timeouts']
 
     avg_turns_per_game = np.mean(turns)
     avg_game_time = np.mean(runtimes)
@@ -148,6 +158,8 @@ if __name__ == "__main__":
         lines = [
             "EXPERIMENT RESULTS:",
             f"\n{num_games * 2} games were played, {num_games} with {args.player1Name} as Red and {args.player2Name} as Blue, and {num_games} vice versa.",
+            f"\n{args.player1Name} timed out {p1_timeouts} times.",
+            f"\n{args.player2Name} timed out {p2_timeouts} times.",
             "\n",
             f"\nOVERALL RESULTS:",
             f"\n{args.player1Name} won {p1_wins} games with a winrate of {p1_winrate:.2f}%.",
