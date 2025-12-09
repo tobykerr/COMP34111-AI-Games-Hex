@@ -46,11 +46,11 @@ def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, boar
         match winner_name:
             case args.player1Name:
                 p1_wins += 1
-                if win_method == 'timeout':
+                if win_method == 'TIMEOUT':
                     p2_timeouts += 1
             case args.player2Name:
                 p2_wins += 1
-                if win_method == 'timeout':
+                if win_method == 'TIMEOUT':
                     p1_timeouts += 1
         
         turns.append(total_turns)
