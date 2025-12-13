@@ -9,15 +9,16 @@ import math
 
 class Node:
     """MCTS Tree Node"""
-    def __init__(self, move=None, parent=None):
+    def __init__(self, move=None, parent=None, player: Colour = None):
         self.move = move              # Move that led to this node
         self.parent = parent          # Parent node
-        self.children = []            # List of child nodes
+        self.children = {}            # Map move -> child Node
         self.visits = 0               # Number of times selected
-        self.wins = 0                 # From those selections, how many wins
+        self.wins = 0                 # From those selections, how many wins (for the player who made the move that created this node)
         self.untried_moves = []       # Moves that have not been expanded
-        self.rave_visits = 0           # RAVE visits = number of rollouts where this move was played, even if it was played later and not from this node
-        self.rave_wins = 0             # RAVE wins = number of those rollouts where this move led to a win
+        self.rave_visits = 0          # RAVE visits = number of rollouts where this move was played, even if it was played later and not from this node
+        self.rave_wins = 0            # RAVE wins = number of those rollouts where this move led to a win (for the player who made that move)
+        self.player = player          # The player who made the move that led to this node (None for root)
 
     def uct_score(self: int, c: float = 1.4): # here, self should be the child node (i.e. node reached from s after taking action a)
         """Calculate the UCT score for this node. NOT CURRENTLY USED."""
@@ -49,23 +50,27 @@ class Node:
 
         return exploitation + exploration
 
-    def best_child(self, mode='max'): # TOBY
+    def best_child(self, mode='robust'): # TOBY
         """Possibilities:
-	- Max child (default): choose the child with the highest average reward (argmax_a Q(s,a))
-	- Robust child: choose the child visited most often (highest N)
-	- Max-robust child: choose the child which is maximal in both rewards and visits. If none exists, run longer until one exists.
-- Secure child: choose child which maximizes a lower confidence interval"""
+    - Max child (default): choose the child with the highest average reward (argmax_a Q(s,a))
+    - Robust child: choose the child visited most often (highest N)
+    - Max-robust child: choose the child which is maximal in both rewards and visits. If none exists, run longer until one exists.
+    - Secure child: choose child which maximizes a lower confidence interval"""
+        children_values = list(self.children.values())
+        if not children_values:
+            raise ValueError("No children to select from in best_child()")
+
         if mode == 'max':
             # Find child with highest average reward (wins / visits)
-            return max(self.children, key=lambda n: n.wins / n.visits if n.visits > 0 else 0)
+            return max(children_values, key=lambda n: n.wins / n.visits if n.visits > 0 else 0)
         if mode == 'robust':
             # Find child with highest visit count
-            return max(self.children, key=lambda n: n.visits)
+            return max(children_values, key=lambda n: n.visits)
         if mode == 'max-robust':
             # Find children that are maximal in both wins and visits
-            max_wins = max(n.wins for n in self.children)
-            max_visits = max(n.visits for n in self.children)
-            candidates = [n for n in self.children if n.wins == max_wins and n.visits == max_visits]
+            max_wins = max(n.wins for n in children_values)
+            max_visits = max(n.visits for n in children_values)
+            candidates = [n for n in children_values if n.wins == max_wins and n.visits == max_visits]
             if candidates:
                 return candidates[0]  # Return the first maximal child
             else:
@@ -83,7 +88,7 @@ class MCTSAgent(AgentBase):
     def __init__(self, colour: Colour):
         super().__init__(colour)
         self.board_size = 11  # fixed for this assignment
-        self.time_limit = 1  # seconds per move
+        self.time_limit = 4.5  # seconds per move, 4 seems good atm.
         self.swap_decided = False
         self.swap_choice = False
 
@@ -103,7 +108,7 @@ class MCTSAgent(AgentBase):
             if tile.colour is None
         ]
 
-        # --- fallback: pick a random legal move ---
+        # --- run MCTS to select a move ---
         if legal_moves:
             x, y = self.run_mcts(board, legal_moves)
             return Move(x, y)
@@ -137,18 +142,18 @@ class MCTSAgent(AgentBase):
         
         win_rate = wins / samples
         
-        #uncomment this once data has been obtained, add filepath
-        '''
-        winrates = []
-        f = open()
-        for line in f:
-            line = line.strip().split(",") #creates a node from an array from a line by seperating the numbers by ','
-            line = [float(i) for i in line] #converts each array element from string into int 
-            winrates.append(line) #adds new node to the graph
-        f.close()
-        '''
+        # #uncomment this once data has been obtained, add filepath
+        # '''
+        # winrates = []
+        # f = open()
+        # for line in f:
+        #     line = line.strip().split(",") #creates a node from an array from a line by seperating the numbers by ','
+        #     line = [float(i) for i in line] #converts each array element from string into int 
+        #     winrates.append(line) #adds new node to the graph
+        # f.close()
+        # '''
         
-        win_rate = winrates[first_move.x][first_move.y]
+        # win_rate = winrates[first_move.x][first_move.y]
         
         return (win_rate > 0.55 and bias < 0.65)
         
@@ -176,19 +181,21 @@ class MCTSAgent(AgentBase):
 
     
     def run_mcts(self, board: Board, legal_moves: list[tuple[int, int]]) -> tuple[int, int]:
-        root = Node()
+        root = Node(player=None)
         root.untried_moves = legal_moves.copy()
         random.shuffle(root.untried_moves)  # shuffle to avoid first-row bias
 
         start_time = time.time()
         while time.time() - start_time < self.time_limit:
             node = root
+            # Clone the board once for this simulation and then apply moves inplace.
             state = self.clone_board(board)
             current_colour = self.colour  # start from agent's turn
 
             # 1. Selection
-            while node.untried_moves == [] and node.children != []:
+            while node.untried_moves == [] and node.children:
                 node = self.uct_select(node)
+                # apply selected child's move in-place
                 state = self.apply_move(state, node.move, current_colour)
                 current_colour = Colour.opposite(current_colour)  # switch turn
 
@@ -196,8 +203,9 @@ class MCTSAgent(AgentBase):
             if node.untried_moves:
                 move = random.choice(node.untried_moves)
                 node.untried_moves.remove(move)
-                child = Node(move=move, parent=node)
-                node.children.append(child)
+                # create child with player = the player who plays this move
+                child = Node(move=move, parent=node, player=current_colour)
+                node.children[move] = child
                 node = child
                 state = self.apply_move(state, move, current_colour)
                 current_colour = Colour.opposite(current_colour)  # switch turn
@@ -213,7 +221,8 @@ class MCTSAgent(AgentBase):
         return best.move
     
     def uct_select(self, node: Node) -> Node: # MIYED
-        return max(node.children, key=lambda child: child.blended_score())
+        # select child with highest blended_score
+        return max(node.children.values(), key=lambda child: child.blended_score())
 
     def clone_board(self, board: Board) -> Board: # must be very efficient # MIYED
         board_copy = Board(board.size)
@@ -228,11 +237,14 @@ class MCTSAgent(AgentBase):
                 
         return board_copy
 
-    def apply_move(self, board: Board, move: tuple[int, int], colour: Colour) -> Board: #MIYED # This is toby's quick implementation currently, using for testing other functions
-        new_board = self.clone_board(board)  # Create a copy of the board
+    def apply_move(self, board: Board, move: tuple[int, int], colour: Colour) -> Board: #MIYED
+        """
+        Mutate the provided board in-place by applying the move, and return it.
+        (Changed from previous cloning behavior to avoid repeated deep copies.)
+        """
         x, y = move
-        new_board.tiles[x][y].colour = colour  # Apply the move
-        return new_board  # Return the updated board
+        board.tiles[x][y].colour = colour  # Apply the move in-place
+        return board  # Return the mutated board for convenience
     
     def get_biased_moves(self, board: Board, colour: Colour):
         """
@@ -281,8 +293,8 @@ class MCTSAgent(AgentBase):
 
 
 
-    def simulate(self, board: Board, colour: Colour) -> Colour: #TOBY
-        state = self.clone_board(board)
+    def simulate(self, board: Board, colour: Colour) -> tuple[Colour, set]:
+        state = board  # already cloned by caller
         played_moves = set()
 
         while True:  # iterate until a win or draw
@@ -293,7 +305,7 @@ class MCTSAgent(AgentBase):
                 if tile.colour is None
             ]
             if not legal_moves:
-                return None, played_moves  # Draw
+                return None, played_moves  # Draw (shouldn't happen in Hex, but kept just in case)
             
             if random.random() < 0.8:
                 candidate_moves = self.get_biased_moves(state, colour)
@@ -303,58 +315,38 @@ class MCTSAgent(AgentBase):
             played_moves.add(move)
             state = self.apply_move(state, move, colour)
 
-            if state.has_ended(colour): 
-                return state.get_winner(), played_moves # return winning colour
+            # Use board-level detection of end-of-game (no dependence on passed colour)
+            if state.has_ended(Colour.RED):
+                return Colour.RED, played_moves
+            if state.has_ended(Colour.BLUE):
+                return Colour.BLUE, played_moves
 
             colour = Colour.opposite(colour) # switch turns
 
     def backpropagate(self, node: Node, winner: Colour, played_moves: set): #TOBY
         '''
-        Backpropagate the result of a simulation up the tree.
-        Increment visits (and wins if agent won) for each node up to the root.
-        Args:
-            node (Node): The node to start backpropagation from.
-            winner (Colour): The colour of the winning player.
+        MoHex-style backpropagation with RAVE (AMAF):
+        - Updates normal MCTS stats (visits, wins) per node (wins credited to node.player)
+        - Updates RAVE stats for parent's children whose moves appeared in the playout
         '''
-        # reward = 1 if winner == self.colour else 0 # only increment wins if agent's colour won
-
-        # while node is not None: # until we reach root of tree
-        #     node.visits += 1
-        #     node.wins += reward
-
-        #     if node.parent:
-        #         for child in node.parent.children:
-        #             if child.move in played_moves:
-        #                 child.rave_visits += 1
-        #                 if winner == self.colour:
-        #                     child.rave_wins += 1
-
-        #     node = node.parent
-
-        depth = 0
         cur = node
 
         while cur is not None:
-            # --- figure out which player this node represents ---
-            if depth % 2 == 0:
-                player = self.colour
-            else:
-                player = Colour.opposite(self.colour)
-
             # --- normal MCTS stats ---
             cur.visits += 1
-            if winner == player:
+            if winner is not None and cur.player is not None and winner == cur.player:
                 cur.wins += 1
 
-            # --- RAVE updates (AMAF) ---
-            if cur.parent is not None:
-                for child in cur.parent.children:
-                    if child.move in played_moves:
+            # --- RAVE updates (AMAF) for parent's children via dict lookup ---
+            parent = cur.parent
+            if parent is not None:
+                for mv in played_moves:
+                    child = parent.children.get(mv)
+                    if child:
                         child.rave_visits += 1
-                        if winner == player:
+                        # rave_wins credited to the player who would play that move (child.player)
+                        if winner is not None and child.player is not None and winner == child.player:
                             child.rave_wins += 1
 
             # move up tree
-            cur = cur.parent
-            depth += 1
-
+            cur = parent
