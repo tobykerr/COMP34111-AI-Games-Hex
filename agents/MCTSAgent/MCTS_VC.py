@@ -6,12 +6,12 @@ from src.Move import Move
 from src.Game import logger
 import time
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class Node:
     """MCTS Tree Node"""
-    def __init__(self, move=None, parent=None, player: Colour = None):
+    def __init__(self, move=None, parent=None, player: Colour = None, state_key = None, stats = None):
         self.move = move              # Move that led to this node
         self.parent = parent          # Parent node
         self.children = {}            # Map move -> child Node
@@ -22,6 +22,11 @@ class Node:
         self.rave_wins = 0            # RAVE wins (AMAF)
         self.player = player          # Player who made the move that led to this node (None for root)
 
+        # TT related
+        
+        self.state_key = state_key
+        self.stats = stats # shared from TT
+
     def uct_score(self, c: float = 1.4):
         """Calculate the UCT score for this node. NOT CURRENTLY USED."""
         if self.visits == 0:
@@ -30,14 +35,24 @@ class Node:
         exploration = c * ((2 * math.log(self.parent.visits) / self.visits) ** 0.5)
         return exploitation + exploration
 
-    def rave_score(self):
+    def rave_score(self, move):
         """Get the RAVE score for this node."""
+        '''
         if self.rave_visits == 0:
             return 0.5
         return self.rave_wins / self.rave_visits
+        '''
+        # updated scoring
+        rv, rw = self.stats.rave.get(move, (0, 0))
+        if rv == 0:
+            return 0.5
+        return rw / rv
 
-    def blended_score(self, c=1.4, k=300):
+    def blended_score(self, parent_visits, move, c=1.4, k=300):
         """Blended UCT + RAVE score."""
+
+
+        '''
         if self.visits == 0:
             return float('inf')
 
@@ -49,6 +64,23 @@ class Node:
         exploration = c * ((2 * math.log(self.parent.visits) / self.visits) ** 0.5)
 
         return exploitation + exploration
+        '''
+
+        v = self.stats.visits
+        if v == 0:
+            return float('inf')
+        q = self.stats.wins / v
+        q_rave = self.rave_score(move)
+        beta = k / (v + k)
+        exploitation = beta * q_rave + (1 - beta) * q
+        exploration = c * ((2 * math.log(parent_visits) / v) ** 0.5)
+
+        return exploitation + exploration
+    
+
+
+
+
 
     def best_child(self, mode='robust'):
         """Select best child."""
@@ -57,13 +89,13 @@ class Node:
             raise ValueError("No children to select from in best_child()")
 
         if mode == 'max':
-            return max(children_values, key=lambda n: n.wins / n.visits if n.visits > 0 else 0)
+            return max(children_values, key=lambda n: n.stats.wins / n.stats.visits if n.stats.visits > 0 else 0)
         if mode == 'robust':
-            return max(children_values, key=lambda n: n.visits)
+            return max(children_values, key=lambda n: n.stats.visits)
         if mode == 'max-robust':
-            max_wins = max(n.wins for n in children_values)
-            max_visits = max(n.visits for n in children_values)
-            candidates = [n for n in children_values if n.wins == max_wins and n.visits == max_visits]
+            max_wins = max(n.stats.wins for n in children_values)
+            max_visits = max(n.stats.visits for n in children_values)
+            candidates = [n for n in children_values if n.stats.wins == max_wins and n.stats.visits == max_visits]
             if candidates:
                 return candidates[0]
             raise ValueError("No maximal child found; consider running MCTS longer.")
@@ -401,6 +433,20 @@ class MCTSAgent(AgentBase):
         self._vc_cache = {}
         self._use_vc_pruning = True
 
+        self.tt = {}  # (state_key) -> TTEntry. This is for transposition table 
+
+    def _state_key(self, board, colour):
+        red, blue, _empty = self._board_bitmasks(board)
+        return (red, blue, str(colour))
+
+    def _tt_get(self, board, colour):
+        key = self._state_key(board, colour)
+        entry = self.tt.get(key)
+        if entry is None:
+            entry = TTEntry()
+            self.tt[key] = entry
+        return key, entry
+
     def make_move(self, turn: int, board: Board, opp_move: Move | None) -> Move:
         self._vc_cache.clear()
 
@@ -477,9 +523,11 @@ class MCTSAgent(AgentBase):
             current_player = opponent
 
     def run_mcts(self, board: Board, legal_moves: list[tuple[int, int]]) -> tuple[int, int]:
-        root = Node(player=None)
+        root_key, root_stats = self._tt_get(board, self.colour)
+        root = Node(player=None, state_key=root_key, stats=root_stats)
         root.untried_moves = self._root_prune_moves(board, legal_moves.copy(), self.colour)
         random.shuffle(root.untried_moves)
+        
 
         start_time = time.time()
         while time.time() - start_time < self.time_limit:
@@ -497,11 +545,19 @@ class MCTSAgent(AgentBase):
             if node.untried_moves:
                 move = random.choice(node.untried_moves)
                 node.untried_moves.remove(move)
-                child = Node(move=move, parent=node, player=current_colour)
+
+                # apply move first
+                state = self.apply_move(state, move, current_colour)
+                next_colour = Colour.opposite(current_colour)
+
+                # then TT lookup for the resulting state + player to move
+                child_key, child_stats = self._tt_get(state, next_colour)
+                child = Node(move=move, parent=node, player=current_colour, state_key=child_key, stats=child_stats)
+
                 node.children[move] = child
                 node = child
-                state = self.apply_move(state, move, current_colour)
-                current_colour = Colour.opposite(current_colour)
+                current_colour = next_colour
+
 
             # 3) Simulation
             winner, played_moves = self.simulate(state, current_colour)
@@ -513,7 +569,9 @@ class MCTSAgent(AgentBase):
         return best.move
 
     def uct_select(self, node: Node) -> Node:
-        return max(node.children.values(), key=lambda child: child.blended_score())
+        parents_visits = max(1, node.stats.visits)
+        return max(node.children.items(), key = lambda item: item[1].blended_score(parents_visits, item[0]))[1]
+    
 
     def clone_board(self, board: Board) -> Board:
         board_copy = Board(board.size)
@@ -671,6 +729,28 @@ class MCTSAgent(AgentBase):
 
             colour = Colour.opposite(colour)
 
+    #new back propagate
+    def backpropagate(self, node: Node, winner: Colour, played_moves: set):
+        cur = node
+        while cur is not None:
+            cur.stats.visits += 1
+            if winner is not None and cur.player is not None and winner == cur.player:
+                cur.stats.wins += 1
+            for mv in played_moves:
+                rv, rw = cur.stats.rave.get(mv, (0, 0))
+                rv += 1
+                if winner is not None and cur.player is not None and winner == cur.player:
+                    rw += 1
+                cur.stats.rave[mv] = (rv, rw)
+            cur = cur.parent
+
+
+
+
+
+
+'''
+
     def backpropagate(self, node: Node, winner: Colour, played_moves: set):
         cur = node
         while cur is not None:
@@ -688,3 +768,11 @@ class MCTSAgent(AgentBase):
                             child.rave_wins += 1
 
             cur = parent
+'''
+@dataclass
+class TTEntry:
+    visits: int = 0
+    wins: int = 0
+    # RAVE stored per move (AMAF): move -> (rave_visits, rave_wins)
+    rave: dict = field(default_factory=dict)
+    # Optional: store children list
