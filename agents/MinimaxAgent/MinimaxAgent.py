@@ -16,10 +16,12 @@ class AlphaBetaAgent(AgentBase):
     def make_move(self, turn, board, opp_move):
         # Swap logic for Turn 2
         # Move.x is Row, Move.y is Col (Based on Game.py)
+        if turn == 1:
+            return Move(1, 2)
         if turn == 2 and opp_move:
              # Simple check: If opponent played in the center 5x5 box, swap.
              if opp_move.x >= 3 and opp_move.x <= 7 and opp_move.y >= 3 and opp_move.y <= 7:
-                  self.colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
+                  # no need to swap colour here, this is handled by Game.py
                   return Move(-1, -1)
         
         # Standard Alpha-Beta Search
@@ -27,7 +29,16 @@ class AlphaBetaAgent(AgentBase):
         # move is (Row, Col)
         return Move(move[0], move[1])  
     
+    # ------- helper functions for in-place move apply and undo
 
+    def _apply_move_inplace(self, board, move, colour):
+        r, c = move
+        # Faster than board.set_tile_colour and avoids extra checks
+        board.tiles[r][c].colour = colour
+
+    def _undo_move_inplace(self, board, move):
+        r, c = move
+        board.tiles[r][c].colour = None
 
     # ------- mini max alpha beta core
 
@@ -40,12 +51,20 @@ class AlphaBetaAgent(AgentBase):
         legal_moves = self._generate_legal_moves(board)
 
         for move in legal_moves:
-            new_board = copy.deepcopy(board)
-            self._apply_move(new_board, move, self.colour)
+            # new_board = copy.deepcopy(board)
+            # self._apply_move(new_board, move, self.colour)
 
-            val = self._min_value(new_board, depth=self.max_depth-1,
+            # val = self._min_value(new_board, depth=self.max_depth-1,
+            #                       alpha=alpha, beta=beta,
+            #                       turn=turn+1)
+
+            self._apply_move_inplace(board, move, self.colour)
+
+            val = self._min_value(board, depth=self.max_depth-1,
                                   alpha=alpha, beta=beta,
                                   turn=turn+1)
+            
+            self._undo_move_inplace(board, move)
 
             if val > best_val:
                 best_val = val
@@ -53,7 +72,13 @@ class AlphaBetaAgent(AgentBase):
 
             alpha = max(alpha, best_val)
 
-        return best_move # x, y
+        if best_move:
+            return best_move # x, y
+        else:
+            print("best_move is None! Something went wrong.")
+            print(f"Legal moves: {legal_moves}")
+            print(f"Best val: {best_val}, Alpha: {alpha}, Beta: {beta}")
+            raise ValueError("No best move found in Alpha-Beta search.")
 
     def _max_value(self, board, depth, alpha, beta, turn):
         if self._terminal_or_cutoff(board, depth, turn):
@@ -61,9 +86,12 @@ class AlphaBetaAgent(AgentBase):
 
         value = -math.inf
         for move in self._generate_legal_moves(board):
-            new_board = copy.deepcopy(board)
-            self._apply_move(new_board, move, self.colour)
-            value = max(value, self._min_value(new_board, depth-1, alpha, beta, turn+1))
+            # new_board = copy.deepcopy(board)
+            # self._apply_move(new_board, move, self.colour)
+            # value = max(value, self._min_value(new_board, depth-1, alpha, beta, turn+1))
+            self._apply_move_inplace(board, move, self.colour)
+            value = max(value, self._min_value(board, depth-1, alpha, beta, turn+1))
+            self._undo_move_inplace(board, move)
             if value >= beta:
                 return value
             alpha = max(alpha, value)
@@ -76,9 +104,12 @@ class AlphaBetaAgent(AgentBase):
         opp_colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
         value = math.inf
         for move in self._generate_legal_moves(board):
-            new_board = copy.deepcopy(board)
-            self._apply_move(new_board, move, opp_colour)
-            value = min(value, self._max_value(new_board, depth-1, alpha, beta, turn+1))
+            # new_board = copy.deepcopy(board)
+            # self._apply_move(new_board, move, opp_colour)
+            # value = min(value, self._max_value(new_board, depth-1, alpha, beta, turn+1))
+            self._apply_move_inplace(board, move, opp_colour)
+            value = min(value, self._max_value(board, depth-1, alpha, beta, turn+1))
+            self._undo_move_inplace(board, move)
             if value <= alpha:
                 return value
             beta = min(beta, value)
@@ -110,7 +141,14 @@ class AlphaBetaAgent(AgentBase):
         # Calculate shortest path for opponent
         opp_path_len = self.dijkstra_shortest_path(board, self.opp_colour())
         
-        # Simple heuristic: Opponent path length - My path length
+        
+        # ensure no NaN results, which happen if child boards have no possible paths
+        if my_path_len == math.inf and opp_path_len == math.inf:
+            return 0
+        if my_path_len == math.inf:
+            return -10_000
+        if opp_path_len == math.inf:
+            return 10_000
         return opp_path_len - my_path_len
 
     def dijkstra_shortest_path(self, board, colour):
