@@ -43,15 +43,16 @@ def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, boar
         total_time = results['total_game_time']
         win_method = results['win_method']
 
-        match winner_name:
-            case args.player1Name:
-                p1_wins += 1
-                if win_method == 'TIMEOUT':
-                    p2_timeouts += 1
-            case args.player2Name:
-                p2_wins += 1
-                if win_method == 'TIMEOUT':
-                    p1_timeouts += 1
+        if winner_name == p1_name:
+            p1_wins += 1
+            if win_method == 'TIMEOUT':
+                p2_timeouts += 1
+        elif winner_name == p2_name:
+            p2_wins += 1
+            if win_method == 'TIMEOUT':
+                p1_timeouts += 1
+        else:
+            raise ValueError("Winner name does not match either player!")
         
         turns.append(total_turns)
         runtimes.append(total_time)
