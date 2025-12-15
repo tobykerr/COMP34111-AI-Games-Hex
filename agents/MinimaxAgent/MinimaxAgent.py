@@ -19,6 +19,7 @@ class AlphaBetaAgent(AgentBase):
         if turn == 2 and opp_move:
              # Simple check: If opponent played in the center 5x5 box, swap.
              if opp_move.x >= 3 and opp_move.x <= 7 and opp_move.y >= 3 and opp_move.y <= 7:
+                  self.colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
                   return Move(-1, -1)
         
         # Standard Alpha-Beta Search
