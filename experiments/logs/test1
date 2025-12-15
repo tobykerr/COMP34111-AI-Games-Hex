@@ -1,2 +1,19 @@
-0,100.0
-100.0,100.0
+EXPERIMENT RESULTS:
+6 games were played, 3 with TT as Red and Minimax as Blue, and 3 vice versa.
+TT timed out 0 times.
+Minimax timed out 1 times.
+
+OVERALL RESULTS:
+TT won 1 games with a winrate of 16.67%.
+Minimax won 5 games with a winrate of 83.33%.
+The average total turns per game was 24.83 turns and the average total game time was 127.98 seconds.
+
+RESULTS WITH TT AS RED, Minimax AS BLUE:
+TT won 0 games with a winrate of 0.00%.
+Minimax won 3 games with a winrate of 100.00%.
+The average total turns per game was 22.00 turns and the average total game time was 84.65 seconds.
+
+RESULTS WITH TT AS BLUE, Minimax AS RED:
+TT won 1 games with a winrate of 33.33%.
+Minimax won 2 games with a winrate of 66.67%.
+The average total turns per game was 27.67 turns and the average total game time was 171.30 seconds.

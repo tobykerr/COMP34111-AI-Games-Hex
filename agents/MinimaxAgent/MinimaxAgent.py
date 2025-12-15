@@ -13,6 +13,12 @@ class AlphaBetaAgent(AgentBase):
         self.board_size = board_size
         self.max_depth = 2 # this can be changed
 
+        # --- Transposition Table (TT)
+        self.tt = {}  # key -> (stored_depth, flag, value)
+        self.TT_EXACT = 0
+        self.TT_LOWER = 1
+        self.TT_UPPER = 2
+
     def make_move(self, turn, board, opp_move):
         # Swap logic for Turn 2
         # Move.x is Row, Move.y is Col (Based on Game.py)
@@ -58,6 +64,23 @@ class AlphaBetaAgent(AgentBase):
     def _max_value(self, board, depth, alpha, beta, turn):
         if self._terminal_or_cutoff(board, depth, turn):
             return self._evaluate(board)
+        
+        # TT lookup
+        alpha0, beta0 = alpha, beta
+        key = self._tt_key(board, self.colour)
+
+        hit = self.tt.get(key)
+        if hit is not None:
+            stored_depth, flag, val = hit
+            if stored_depth >= depth:
+                if flag == self.TT_EXACT:
+                    return val
+                elif flag == self.TT_LOWER:
+                    alpha = max(alpha, val)
+                else:  # TT_UPPER
+                    beta = min(beta, val)
+                if alpha >= beta:
+                    return val
 
         value = -math.inf
         for move in self._generate_legal_moves(board):
@@ -65,23 +88,65 @@ class AlphaBetaAgent(AgentBase):
             self._apply_move(new_board, move, self.colour)
             value = max(value, self._min_value(new_board, depth-1, alpha, beta, turn+1))
             if value >= beta:
+                # store as LOWER bound
+                self.tt[key] = (depth, self.TT_LOWER, value)
                 return value
             alpha = max(alpha, value)
+
+        # store in TT
+        if value <= alpha0:
+            flag = self.TT_UPPER
+        elif value >= beta0:
+            flag = self.TT_LOWER
+        else:
+            flag = self.TT_EXACT
+
+        self.tt[key] = (depth, flag, value)
         return value
 
     def _min_value(self, board, depth, alpha, beta, turn):
         if self._terminal_or_cutoff(board, depth, turn):
             return self._evaluate(board)
-
         opp_colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
+        
+        alpha0, beta0 = alpha, beta
+        key = self._tt_key(board, opp_colour)
+
+        hit = self.tt.get(key)
+        if hit is not None:
+            stored_depth, flag, val = hit
+            if stored_depth >= depth:
+                if flag == self.TT_EXACT:
+                    return val
+                elif flag == self.TT_LOWER:
+                    alpha = max(alpha, val)
+                else:  # TT_UPPER
+                    beta = min(beta, val)
+                if alpha >= beta:
+                    return val
+
+    
+
+        
         value = math.inf
         for move in self._generate_legal_moves(board):
             new_board = copy.deepcopy(board)
             self._apply_move(new_board, move, opp_colour)
             value = min(value, self._max_value(new_board, depth-1, alpha, beta, turn+1))
             if value <= alpha:
+                # store as UPPER bound (fail-low)
+                self.tt[key] = (depth, self.TT_UPPER, value)
                 return value
             beta = min(beta, value)
+        # store in TT
+        if value <= alpha0:
+            flag = self.TT_UPPER
+        elif value >= beta0:
+            flag = self.TT_LOWER
+        else:
+            flag = self.TT_EXACT
+
+        self.tt[key] = (depth, flag, value)
         return value
 
     def _terminal_or_cutoff(self, board, depth, turn):
@@ -182,3 +247,24 @@ class AlphaBetaAgent(AgentBase):
                              heappush(pq, (new_cost, nr, nc))
                              
         return math.inf
+    
+    def _tt_key(self, board, to_move_colour):
+        # Board content + side to move (important!)
+        # Using small ints to keep the key compact and hashable
+        # None=0, RED=1, BLUE=2
+        if to_move_colour == Colour.RED:
+            tm = 1
+        else:
+            tm = 2
+
+        flat = []
+        for row in board.tiles:
+            for tile in row:
+                if tile.colour is None:
+                    flat.append(0)
+                elif tile.colour == Colour.RED:
+                    flat.append(1)
+                else:
+                    flat.append(2)
+
+        return (tm, board.size, tuple(flat))
