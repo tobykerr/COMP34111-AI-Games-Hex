@@ -6,6 +6,7 @@ from src.AgentBase import AgentBase
 from src.Board import Board
 from src.Colour import Colour
 from src.Move import Move
+from src.Tile import Tile
 
 class AlphaBetaAgent(AgentBase):
     def __init__(self, colour, board_size=11):
@@ -14,8 +15,15 @@ class AlphaBetaAgent(AgentBase):
         self.max_depth = 2 # this can be changed
 
     def make_move(self, turn, board, opp_move):
-        # Swap logic for Turn 2
-        # Move.x is Row, Move.y is Col (Based on Game.py)
+        # 1. SAVEBRIDGE CHECK
+        # If the opponent's last move attacks a bridge, we must save it immediately.
+        # This acts as a heuristic pruning step.
+        save_move = self.check_savebridge(board, opp_move)
+        if save_move:
+            return save_move
+
+        # 2. Standard Minimax (if no bridge is threatened)
+        # need to handle swap rule for very first move
         if turn == 1:
             return Move(1, 2)
         if turn == 2 and opp_move:
@@ -24,21 +32,77 @@ class AlphaBetaAgent(AgentBase):
                   # no need to swap colour here, this is handled by Game.py
                   return Move(-1, -1)
         
-        # Standard Alpha-Beta Search
-        move = self._choose_with_alpha_beta(board, turn)
-        # move is (Row, Col)
-        return Move(move[0], move[1])  
+        # choose (x, y)
+        x, y = self._choose_with_alpha_beta(board, turn)
+        return Move(x, y)  
     
-    # ------- helper functions for in-place move apply and undo
+    # ------- Savebridge Logic -------
+    def check_savebridge(self, board, opp_move):
+        """
+        Checks if the opponent's last move broke a bridge connection.
+        A bridge is two of our stones that share exactly two common neighbors (carriers).
+        If opponent plays on one carrier, we must play on the other.
+        """
+        if opp_move is None or opp_move.is_swap():
+            return None
 
-    def _apply_move_inplace(self, board, move, colour):
-        r, c = move
-        # Faster than board.set_tile_colour and avoids extra checks
-        board.tiles[r][c].colour = colour
+        mx, my = opp_move.x, opp_move.y
+        
+        # Find all pairs of our stones that have the opponent's move as a common neighbor
+        # These are potential bridges being threatened
+        for dx1, dy1, dx2, dy2 in self._get_bridge_patterns():
+            s1_x, s1_y = mx + dx1, my + dy1
+            s2_x, s2_y = mx + dx2, my + dy2
+            
+            # Check if both stones exist, are in bounds, and are our color
+            if (self.is_valid_pos(s1_x, s1_y, board) and 
+                self.is_valid_pos(s2_x, s2_y, board) and
+                board.tiles[s1_x][s1_y].colour == self.colour and
+                board.tiles[s2_x][s2_y].colour == self.colour):
+                
+                # Now find the other common neighbor (the other carrier)
+                # Get neighbors of both stones
+                neighbors1 = self._get_neighbors(s1_x, s1_y, board)
+                neighbors2 = self._get_neighbors(s2_x, s2_y, board)
+                
+                # Find common neighbors
+                common = neighbors1 & neighbors2
+                
+                # Remove the opponent's move from common neighbors
+                common.discard((mx, my))
+                
+                # If there's exactly one other common neighbor, that's our saving move
+                if len(common) == 1:
+                    save_pos = list(common)[0]
+                    return Move(save_pos[0], save_pos[1])
+        
+        return None
 
-    def _undo_move_inplace(self, board, move):
-        r, c = move
-        board.tiles[r][c].colour = None
+    def _get_bridge_patterns(self):
+        """
+        Returns displacement pairs for stones that could form a bridge.
+        These are all pairs of positions that are exactly 2 steps apart on the hex grid.
+        """
+        patterns = []
+        #  For each pair of neighbor indices, check if they could form a bridge
+        for i in range(6):
+            for j in range(i+1, 6):
+                patterns.append((Tile.I_DISPLACEMENTS[i], Tile.J_DISPLACEMENTS[i],
+                               Tile.I_DISPLACEMENTS[j], Tile.J_DISPLACEMENTS[j]))
+        return patterns
+    
+    def _get_neighbors(self, x, y, board):
+        """Get all valid neighbors of a position as a set of (x, y) tuples."""
+        neighbors = set()
+        for i in range(6):
+            nx = x + Tile.I_DISPLACEMENTS[i]
+            ny = y + Tile.J_DISPLACEMENTS[i]
+            if self.is_valid_pos(nx, ny, board):
+                neighbors.add((nx, ny))
+        return neighbors
+
+    def is_valid_pos(self, x, y, board):
+        return 0 <= x < board.size and 0 <= y < board.size
 
     # ------- mini max alpha beta core
 
