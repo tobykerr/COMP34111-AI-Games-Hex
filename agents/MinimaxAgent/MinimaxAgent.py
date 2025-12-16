@@ -16,18 +16,54 @@ class AlphaBetaAgent(AgentBase):
     def make_move(self, turn, board, opp_move):
         # Swap logic for Turn 2
         # Move.x is Row, Move.y is Col (Based on Game.py)
-        if turn == 2 and opp_move:
+        if turn == 1:
+            return self.decide_first()
+        
+        if turn == 2 and self.decide_swap(opp_move):
              # Simple check: If opponent played in the center 5x5 box, swap.
+            self.colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
+            return Move(-1, -1)
+             '''
              if opp_move.x >= 3 and opp_move.x <= 7 and opp_move.y >= 3 and opp_move.y <= 7:
                   self.colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
                   return Move(-1, -1)
-        
+                '''
+            
         # Standard Alpha-Beta Search
         move = self._choose_with_alpha_beta(board, turn)
         # move is (Row, Col)
         return Move(move[0], move[1])  
     
-
+    
+    def decide_first(self) -> Move:
+        x,y = 0
+        top = 0
+        for item in [(0,1),(1,1),(2,1),(0,2),(3,1),(0,3),(1,3),(0,5),(0,6),(0,7),(0,10)]:
+            if winrates[item[0]][item[1]] > top:
+                top = winrates[item[0]][item[1]]
+                x = item[0]
+                y = item[1]
+        return Move(x,y)
+    
+    def decide_swap(self, first_move: Move):
+        if (first_move.x, first_move.y) in [(0,0),'''(0,board.size-1), (board.size-1,0),'''(board.size-1,board.size-1)]:
+            return False
+        elif first_move.x >= 3 and first_move.x <= 7 and first_move.y >= 3 and first_move.y <= 7:
+            return True
+            
+        winrates = []
+        
+        f = open("test3")
+        for line in f:
+            line = line.strip().split(",")
+            line = [float(i) for i in line]
+            winrates.append(line)
+        f.close()
+        
+        if winrates[first_move.x][first_move.y] < 50:
+            return True
+        else:
+            return False
 
     # ------- mini max alpha beta core
 
