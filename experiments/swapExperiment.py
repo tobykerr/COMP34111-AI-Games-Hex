@@ -16,7 +16,7 @@ from src.Colour import Colour
 from src.Game import Game
 from src.Player import Player
 from src.Move import Move
-
+#python experiments/swapExperiment.py -p1 "agents.DefaultAgents.NaiveSwapAgent NaiveSwapAgent" -p2 "agents.DefaultAgents.NaiveSwapAgent NaiveSwapAgent" -p1Name "FirstMove" -p2Name "SecondMove" -l "experiments/logs/test1"
 def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, board_size, verbose, initial_move):
     p1_wins = 0
     p2_wins = 0
@@ -129,7 +129,7 @@ if __name__ == "__main__":
         "-n",
         "--num_games",
         type=int,
-        default=1,
+        default=200,
         help="Number of games to be played as Red in the experiment. NOTE: Total games played will be twice this!"
 
     )
@@ -141,22 +141,33 @@ if __name__ == "__main__":
     p2 = importlib.import_module(p2_path)
     num_games = args.num_games
     
-    test_range = 2 #should be changed to 11 once done
+    test_range = 11 #should be changed to 11 once done
     exp_results = [[None for x in range(test_range)] for y in range(test_range)]
     p1_wins = 0
     p2_wins = 0
-    p1_winrates = [[0 for x in range(test_range)] for y in range(test_range)]
+    p1_winrates = [[None for x in range(test_range)] for y in range(test_range)]
     p2_winrates = [[0 for x in range(test_range)] for y in range(test_range)]
 
     for i in range(test_range):
-        for j in range(test_range):
-            if (i,j) not in [(0,0), (0,10), (10,0), (10,10)]:
-                exp_results[i][j] = run_experiment(p1, p2, args.player1Name, args.player2Name, p1_class, p2_class, num_games, args.board_size, args.verbose, Move(i,j))
-                p1_winrates[i][j] = (exp_results[i][j]['p1_wins'] / (num_games)) * 100
-                p1_wins += exp_results[i][j]['p1_wins']
-                p2_winrates[i][j] = (exp_results[i][j]['p2_wins'] / (num_games)) * 100
-                p2_wins += exp_results[i][j]['p2_wins']
+        for j in range(test_range - i):
+            exp_results[i][j] = run_experiment(p1, p2, args.player1Name, args.player2Name, p1_class, p2_class, num_games, args.board_size, args.verbose, Move(i,j))
+            p1_winrates[i][j] = (exp_results[i][j]['p1_wins'] / (num_games)) * 100
+            p1_wins += exp_results[i][j]['p1_wins']
+            p2_winrates[i][j] = (exp_results[i][j]['p2_wins'] / (num_games)) * 100
+            p2_wins += exp_results[i][j]['p2_wins']
+
+    symmetry = []
     
+    for i in range(test_range-1):
+        temp = p1_winrates[i][:-i-1]
+        symmetry.append(temp)
+    
+    symmetry = symmetry[::-1]
+    
+    for i in range(1,test_range):
+        for j in range(len(symmetry[i-1])):
+            p1_winrates[i][test_range-j-1] = symmetry[i-1][j]
+           
     with open(args.log, 'w') as results_file:
         lines = []
         
