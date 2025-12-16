@@ -18,16 +18,21 @@ class AlphaBetaAgent(AgentBase):
         # Move.x is Row, Move.y is Col (Based on Game.py)
         if turn == 1:
             return Move(1, 2)
-        if turn == 2 and opp_move:
-             # Simple check: If opponent played in the center 5x5 box, swap.
-             if opp_move.x >= 3 and opp_move.x <= 7 and opp_move.y >= 3 and opp_move.y <= 7:
-                  # no need to swap colour here, this is handled by Game.py
-                  return Move(-1, -1)
+        if turn == 2 and opp_move and self.decide_swap(opp_move):
+            return Move(-1, -1)
         
         # Standard Alpha-Beta Search
         move = self._choose_with_alpha_beta(board, turn)
         # move is (Row, Col)
         return Move(move[0], move[1])  
+        
+        
+    def decide_swap(self, first_move: Move):
+        no_swaps = [(0,i) for i in range(10)] + [(10,j) for j in range(1,11)] + [(1,i) for i in range(9)] + [(10,j) for j in range(1,11)]
+        if (first_move.x, first_move.y) in no_swaps:
+            return False
+        else:
+            return True
     
     # ------- helper functions for in-place move apply and undo
 
