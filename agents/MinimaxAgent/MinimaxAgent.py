@@ -116,7 +116,13 @@ class AlphaBetaAgent(AgentBase):
         alpha = -math.inf
         beta = math.inf
 
-        legal_moves = self._generate_legal_moves(board)
+        #legal_moves = self._generate_legal_moves(board)
+        legal_moves = [
+            (tile.x, tile.y)
+            for row in board.tiles
+            for tile in row
+            if tile.colour is None
+        ]
 
         for move in legal_moves:
             # new_board = copy.deepcopy(board)
@@ -198,10 +204,15 @@ class AlphaBetaAgent(AgentBase):
                     # Return (Row, Col) => (y, x)
                     moves.append((y, x))
         return moves
-
-    def _apply_move(self, board, move, colour):
-        r, c = move # (Row, Col)
-        board.set_tile_colour(r, c, colour)
+        
+    def _apply_move_inplace(self, board, move, colour):
+        r, c = move
+        # Faster than board.set_tile_colour and avoids extra checks
+        board.tiles[r][c].colour = colour
+        
+    def _undo_move_inplace(self, board, move):
+        r, c = move
+        board.tiles[r][c].colour = None
 
     def _evaluate(self, board):
         # Calculate shortest path for self
