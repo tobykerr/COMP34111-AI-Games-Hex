@@ -26,7 +26,8 @@ class AlphaBetaAgent(AgentBase):
         # move is (Row, Col)
         return Move(move[0], move[1])  
         
-        
+    # ------- swap decider function
+    
     def decide_swap(self, first_move: Move):
         no_swaps = [(0,i) for i in range(10)] + [(10,j) for j in range(1,11)] + [(1,i) for i in range(9)] + [(10,j) for j in range(1,11)]
         if (first_move.x, first_move.y) in no_swaps:
@@ -44,6 +45,38 @@ class AlphaBetaAgent(AgentBase):
     def _undo_move_inplace(self, board, move):
         r, c = move
         board.tiles[r][c].colour = None
+        
+    # -------
+    
+    def _move_score(self, board, move):
+        r, c = move
+        size = board.size
+        center_dist = abs(r - size // 2) + abs(c - size // 2)
+        
+        if self.colour == Colour.RED:
+            goal = min(r, size - 1 - r)
+        else:
+            goal = min(c, size - 1 - c)
+            
+        friendly = 0
+        neighbors = [
+            (r-1, c), (r-1, c+1),
+            (r, c+1), (r+1, c),
+            (r+1, c-1), (r, c-1)
+        ]
+        
+        for nr, nc in neighbors:
+            if 0 <= nr < size and 0 <= nc < size:
+                if board.tiles[nr][nc].colour == self.colour:
+                    friendly += 1
+        
+        score = (center_dist) + (goal) - (2 * friendly)
+        
+        return score
+    
+    def _order_moves(self, board, moves):
+        return sorted(moves, key=lambda m: self._move_score(board, m))
+        
 
     # ------- mini max alpha beta core
 
@@ -54,6 +87,7 @@ class AlphaBetaAgent(AgentBase):
         beta = math.inf
 
         legal_moves = self._generate_legal_moves(board)
+        legal_moves = self._order_moves(board, legal_moves)
 
         for move in legal_moves:
             # new_board = copy.deepcopy(board)
@@ -90,7 +124,11 @@ class AlphaBetaAgent(AgentBase):
             return self._evaluate(board)
 
         value = -math.inf
-        for move in self._generate_legal_moves(board):
+        
+        legal_moves = self._generate_legal_moves(board)
+        legal_moves = self._order_moves(board, legal_moves)
+        
+        for move in legal_moves:
             # new_board = copy.deepcopy(board)
             # self._apply_move(new_board, move, self.colour)
             # value = max(value, self._min_value(new_board, depth-1, alpha, beta, turn+1))
@@ -108,7 +146,11 @@ class AlphaBetaAgent(AgentBase):
 
         opp_colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
         value = math.inf
-        for move in self._generate_legal_moves(board):
+        
+        legal_moves = self._generate_legal_moves(board)
+        legal_moves = self._order_moves(board, legal_moves)
+        
+        for move in legal_moves:
             # new_board = copy.deepcopy(board)
             # self._apply_move(new_board, move, opp_colour)
             # value = min(value, self._max_value(new_board, depth-1, alpha, beta, turn+1))
