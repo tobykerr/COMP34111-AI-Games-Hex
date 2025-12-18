@@ -150,13 +150,13 @@ class AlphaBetaAgent(AgentBase):
             self._undo_move_inplace(board, move)
 
             if value >= beta:
-                # store as LOWER bound [integrated from agent 2]
+                # store as LOWER bound
                 self.tt[key] = (depth, self.TT_LOWER, value)
                 return value
 
             alpha = max(alpha, value)
 
-        # store in TT [integrated from agent 2]
+        # store in TT
         if value <= alpha0:
             flag = self.TT_UPPER
         elif value >= beta0:
@@ -173,7 +173,7 @@ class AlphaBetaAgent(AgentBase):
 
         opp_colour = Colour.RED if self.colour == Colour.BLUE else Colour.BLUE
 
-        # TT lookup [integrated from agent 2]
+        # TT lookup
         alpha0, beta0 = alpha, beta
         key = self._tt_key(board, opp_colour)
 
