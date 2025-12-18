@@ -19,6 +19,10 @@ from src.Player import Player
 def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, board_size, verbose):
     p1_wins = 0
     p2_wins = 0
+    p1_turns = 0
+    p2_turns = 0
+    p1_time = 0.0
+    p2_time = 0.0
     runtimes = []
     turns = []
     p1_timeouts = 0
@@ -42,6 +46,10 @@ def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, boar
         winner_name = results['winner']
         total_time = results['total_game_time']
         win_method = results['win_method']
+        p1_time += results["player1_move_time"]
+        p2_time += results["player2_move_time"]
+        p1_turns += results["player1_turns"]
+        p2_turns += results["player2_turns"]
 
         if winner_name == p1_name:
             p1_wins += 1
@@ -60,6 +68,8 @@ def run_experiment(p1, p2, p1_name, p2_name, p1_class, p2_class, num_games, boar
     return {
         'p1_wins': p1_wins,
         'p2_wins': p2_wins,
+        'p1_avg_turn_time': p1_time / p1_turns,
+        'p2_avg_turn_time': p2_time / p2_turns,
         'total_turns_list': turns,
         'total_runtimes_list': runtimes,
         'p1_timeouts': p1_timeouts,
@@ -158,7 +168,7 @@ if __name__ == "__main__":
     with open(args.log, 'w') as results_file:
         lines = [
             "EXPERIMENT RESULTS:",
-            f"\n{num_games * 2} games were played, {num_games} with {args.player1Name} as Red and {args.player2Name} as Blue, and {num_games} vice versa.",
+            f"\n{num_games * 2} games were played, {num_games} with {args.player1Name} as p1 and {args.player2Name} as p2, and {num_games} vice versa.",
             f"\n{args.player1Name} timed out {p1_timeouts} times.",
             f"\n{args.player2Name} timed out {p2_timeouts} times.",
             "\n",
@@ -167,14 +177,18 @@ if __name__ == "__main__":
             f"\n{args.player2Name} won {p2_wins} games with a winrate of {p2_winrate:.2f}%.",
             f"\nThe average total turns per game was {avg_turns_per_game:.2f} turns and the average total game time was {avg_game_time:.2f} seconds.",
             "\n",
-            f"\nRESULTS WITH {args.player1Name} AS RED, {args.player2Name} AS BLUE:",
+            f"\nRESULTS WITH {args.player1Name} AS P1, {args.player2Name} AS P2:",
             f"\n{args.player1Name} won {exp1_results['p1_wins']} games with a winrate of {((exp1_results['p1_wins'] / num_games) * 100):.2f}%.",
             f"\n{args.player2Name} won {exp1_results['p2_wins']} games with a winrate of {((exp1_results['p2_wins'] / num_games) * 100):.2f}%.",
+            f"\n{args.player1Name} average turn time: {exp1_results['p1_avg_turn_time']:.4f} seconds.",
+            f"\n{args.player2Name} average turn time: {exp1_results['p2_avg_turn_time']:.4f} seconds.",
             f"\nThe average total turns per game was {np.mean(exp1_results['total_turns_list']):.2f} turns and the average total game time was {np.mean(exp1_results['total_runtimes_list']):.2f} seconds.",
             "\n",
-            f"\nRESULTS WITH {args.player1Name} AS BLUE, {args.player2Name} AS RED:",
+            f"\nRESULTS WITH {args.player1Name} AS P2, {args.player2Name} AS P1:",
             f"\n{args.player1Name} won {exp2_results['p2_wins']} games with a winrate of {((exp2_results['p2_wins'] / num_games) * 100):.2f}%.",
             f"\n{args.player2Name} won {exp2_results['p1_wins']} games with a winrate of {((exp2_results['p1_wins'] / num_games) * 100):.2f}%.",
+            f"\n{args.player1Name} average turn time: {exp2_results['p2_avg_turn_time']:.4f} seconds.",
+            f"\n{args.player2Name} average turn time: {exp2_results['p1_avg_turn_time']:.4f} seconds.",
             f"\nThe average total turns per game was {np.mean(exp2_results['total_turns_list']):.2f} turns and the average total game time was {np.mean(exp2_results['total_runtimes_list']):.2f} seconds.",
         ]
         results_file.writelines(lines)
